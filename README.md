@@ -9,14 +9,15 @@ Modules are designed to be **drop-in** via [jsDelivr CDN](https://www.jsdelivr.c
 | Path | Namespace | Purpose |
 |---|---|---|
 | [`xlsx/thai-be.js`](xlsx/thai-be.js) | `SeShared.xlsx.thaiBe` | Convert Thai Buddhist Era dates (text + Excel-encoded serials) when importing xlsx into Univer |
+| [`print/preview.js`](print/preview.js) | `SeShared.print.preview` | Print PDF blobs via popup + auto-print, Ctrl+P interceptor for canvas-based UIs |
 
-More modules to be added as common patterns emerge (print preview, file I/O, UI components, etc).
+More modules to be added as common patterns emerge (file I/O, UI components, etc).
 
 ## Quick Start
 
 ```html
 <!-- Load specific module(s) you need -->
-<script src="https://cdn.jsdelivr.net/gh/sesurvey-ai/se-univer-shared@v1.0.1/xlsx/thai-be.js"></script>
+<script src="https://cdn.jsdelivr.net/gh/sesurvey-ai/se-univer-shared@v1.1.0/xlsx/thai-be.js"></script>
 
 <script>
     // Each module attaches to window.SeShared.<category>.<name>
@@ -27,7 +28,7 @@ More modules to be added as common patterns emerge (print preview, file I/O, UI 
 ## Versioning
 
 - **Pin to a specific tag** for production stability:
-  `cdn.jsdelivr.net/gh/sesurvey-ai/se-univer-shared@v1.0.1/...`
+  `cdn.jsdelivr.net/gh/sesurvey-ai/se-univer-shared@v1.1.0/...`
 - **Pin to a branch** for auto-updates (jsDelivr caches ~24h):
   `cdn.jsdelivr.net/gh/sesurvey-ai/se-univer-shared@main/...`
 
