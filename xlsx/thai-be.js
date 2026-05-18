@@ -3,12 +3,12 @@
  *
  * Thai Buddhist Era date handling for Excel xlsx imports into Univer.
  *
- * Repo:    https://github.com/sesurvey-ai/univer-shared
+ * Repo:    https://github.com/sesurvey-ai/se-univer-shared
  * License: MIT
  *
  * USAGE (browser, drop-in via CDN):
  *
- *   <script src="https://cdn.jsdelivr.net/gh/sesurvey-ai/univer-shared@v1.0.0/xlsx/thai-be.js"></script>
+ *   <script src="https://cdn.jsdelivr.net/gh/sesurvey-ai/se-univer-shared@v1.0.1/xlsx/thai-be.js"></script>
  *   <script>
  *     // After you have a Univer-shaped workbook data (from SheetJS):
  *     SeShared.xlsx.thaiBe.applyToWorkbook(workbookData);
@@ -288,7 +288,7 @@
     // ----- Public API -----
 
     SeShared.xlsx.thaiBe = {
-        version: '1.0.0',
+        version: '1.0.1',
         THAI_BE_SERIAL_OFFSET: THAI_BE_SERIAL_OFFSET,
         THAI_MONTH_NAMES: THAI_MONTH_NAMES,
         isDateFormatPattern: isDateFormatPattern,

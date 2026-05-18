@@ -1,4 +1,4 @@
-# univer-shared
+# se-univer-shared
 
 Shared helpers/utilities for [Univer](https://univer.ai)-based projects across the **sesurvey-ai** organization.
 
@@ -16,7 +16,7 @@ More modules to be added as common patterns emerge (print preview, file I/O, UI 
 
 ```html
 <!-- Load specific module(s) you need -->
-<script src="https://cdn.jsdelivr.net/gh/sesurvey-ai/univer-shared@v1.0.0/xlsx/thai-be.js"></script>
+<script src="https://cdn.jsdelivr.net/gh/sesurvey-ai/se-univer-shared@v1.0.1/xlsx/thai-be.js"></script>
 
 <script>
     // Each module attaches to window.SeShared.<category>.<name>
@@ -27,16 +27,16 @@ More modules to be added as common patterns emerge (print preview, file I/O, UI 
 ## Versioning
 
 - **Pin to a specific tag** for production stability:
-  `cdn.jsdelivr.net/gh/sesurvey-ai/univer-shared@v1.0.0/...`
+  `cdn.jsdelivr.net/gh/sesurvey-ai/se-univer-shared@v1.0.1/...`
 - **Pin to a branch** for auto-updates (jsDelivr caches ~24h):
-  `cdn.jsdelivr.net/gh/sesurvey-ai/univer-shared@main/...`
+  `cdn.jsdelivr.net/gh/sesurvey-ai/se-univer-shared@main/...`
 
 Follows [SemVer](https://semver.org/): bumping major = breaking API; minor = additive features; patch = bug fixes.
 
 ## Repository Layout
 
 ```
-univer-shared/
+se-univer-shared/
 ├── xlsx/                 ← Excel-specific modules
 ├── docx/                 ← Word-specific modules (future)
 ├── print/                ← Print/preview helpers (future)

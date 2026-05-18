@@ -9,7 +9,7 @@
 Module [`xlsx/thai-be.js`](../xlsx/thai-be.js) ใน repo นี้ implement **Layer 4 ทั้งหมด** (Thai BE handling) พร้อมใช้ทันที — ครอบคลุม Case A (text dates) + Case B (Excel-encoded numeric serials) + pattern translation
 
 ```html
-<script src="https://cdn.jsdelivr.net/gh/sesurvey-ai/univer-shared@v1.0.0/xlsx/thai-be.js"></script>
+<script src="https://cdn.jsdelivr.net/gh/sesurvey-ai/se-univer-shared@v1.0.1/xlsx/thai-be.js"></script>
 
 <script>
 async function importExcel(file) {
