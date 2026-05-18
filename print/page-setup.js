@@ -801,6 +801,41 @@
             if (previewEnabled) {
                 clearTimeout(pv.debounceTimer);
                 pv.buildToken++;  // invalidate any in-flight build
+                // Clear the preview cache on close so the next open
+                // always rebuilds against the consumer's CURRENT workbook
+                // data. The cache is keyed by JSON.stringify(pageSetupState)
+                // — that key alone can't detect when the consumer edited
+                // the underlying data (added rows, changed colours, etc.)
+                // between modal opens, so without this users would see a
+                // stale preview after editing and reopening. Cache benefit
+                // is still preserved within a single modal session (e.g.
+                // toggling A4 ↔ A3 stays instant — both states get cached
+                // in the same session).
+                for (var pdf of pv.cache.values()) {
+                    try { pdf.destroy(); } catch (e) {}
+                }
+                pv.cache.clear();
+                pv.pdf = null;
+                pv.pageCount = 1;
+                pv.pageNumber = 1;
+                // Wipe the visible canvas + offscreen buffer so a stale
+                // image doesn't briefly flash on next open before the
+                // new build lands.
+                var canvas = _qs(overlay, 'canvas');
+                if (canvas) {
+                    if (canvas.getContext) {
+                        canvas.getContext('2d').clearRect(
+                            0, 0, canvas.width, canvas.height);
+                    }
+                    canvas.width = 0;
+                    canvas.height = 0;
+                }
+                if (pv.offCanvas) {
+                    pv.offCanvas.width = 0;
+                    pv.offCanvas.height = 0;
+                    pv.offCanvas = null;
+                }
+                _updateNav();
             }
             if (typeof opts.onClose === 'function') {
                 try { opts.onClose(); }
@@ -859,7 +894,7 @@
     // ----- Public API -----
 
     SeShared.print.pageSetup = {
-        version: '1.1.0',
+        version: '1.1.1',
         DEFAULTS: DEFAULTS,
         MARGIN_PRESETS: MARGIN_PRESETS,
         colIdxToLetter: colIdxToLetter,
