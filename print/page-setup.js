@@ -5,6 +5,11 @@
  * UI + state + localStorage persistence. Consumer wires in their own
  * print/preview pipeline via callbacks.
  *
+ * v1.1.0+ adds a live PDF preview pane (PDF.js-rendered) with debounced
+ * rebuild, LRU cache, and page navigation. Consumer provides the PDF
+ * generator via opts.preview.generatePdf — the module handles cache,
+ * rendering, page nav, and margin overlay automatically.
+ *
  * Repo:    https://github.com/sesurvey-ai/se-univer-shared
  * License: MIT
  *
@@ -51,6 +56,30 @@
     SeShared.print = SeShared.print || {};
 
     // ----- Constants -----
+
+    // PDF.js lazy-load (only fetched when a preview-enabled init() asks
+    // for live rendering). Pinned to the same versions consumer apps
+    // typically use; consumer can override via opts.preview.pdfJsUrl.
+    var PDFJS_URL = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js';
+    var PDFJS_WORKER_URL = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js';
+
+    // Paper sizes (mm, portrait orientation). Mirrors the table in
+    // print/pdf-generator — duplicated here so this module is self-
+    // contained for margin-overlay sizing.
+    var PAPER_SIZES_MM = {
+        a3:     { w: 297, h: 420 },
+        a4:     { w: 210, h: 297 },
+        a5:     { w: 148, h: 210 },
+        letter: { w: 215.9, h: 279.4 },
+        legal:  { w: 215.9, h: 355.6 },
+    };
+
+    function _paperToOrientedMm(paperSize, orientation) {
+        var p = PAPER_SIZES_MM[paperSize] || PAPER_SIZES_MM.a4;
+        return orientation === 'landscape'
+            ? { w: p.h, h: p.w }
+            : { w: p.w, h: p.h };
+    }
 
     var DEFAULTS = {
         paperSize: 'a4',
@@ -453,6 +482,36 @@
         };
     }
 
+    // ----- PDF.js lazy loader (only used when preview is enabled) -----
+
+    var _pdfJsState = { loaded: false, loadingPromise: null };
+    function _loadPdfJs(pdfJsUrl, workerUrl) {
+        if (_pdfJsState.loaded) return Promise.resolve();
+        if (_pdfJsState.loadingPromise) return _pdfJsState.loadingPromise;
+        var jsUrl = pdfJsUrl || PDFJS_URL;
+        var wUrl = workerUrl || PDFJS_WORKER_URL;
+        _pdfJsState.loadingPromise = new Promise(function(resolve, reject) {
+            var s = document.createElement('script');
+            s.src = jsUrl;
+            s.async = true;
+            s.onload = function() {
+                if (!global.pdfjsLib) {
+                    reject(new Error('pdfjsLib global missing after script load'));
+                    return;
+                }
+                global.pdfjsLib.GlobalWorkerOptions.workerSrc = wUrl;
+                _pdfJsState.loaded = true;
+                resolve();
+            };
+            s.onerror = function() { reject(new Error('Failed to load PDF.js: ' + jsUrl)); };
+            document.head.appendChild(s);
+        }).catch(function(err) {
+            _pdfJsState.loadingPromise = null;
+            throw err;
+        });
+        return _pdfJsState.loadingPromise;
+    }
+
     // ----- init -----
 
     /**
@@ -469,12 +528,34 @@
      *        () => void — called when user clicks "รีเซ็ตค่าเริ่มต้น"
      * @param {Function} [opts.onClose]
      *        () => void — called when modal closes (any reason)
+     * @param {Object} [opts.preview]
+     *        Enable live PDF preview pane (v1.1.0+). Omit to hide the
+     *        preview area entirely.
+     * @param {Function} opts.preview.generatePdf
+     *        (state) => Promise<Blob | null> — consumer generates a PDF
+     *        from the current form state. Module caches by JSON.stringify,
+     *        parses via PDF.js, renders to the modal's canvas, sizes the
+     *        margin overlay. Returning null shows "empty" status.
+     * @param {number} [opts.preview.debounceMs=400]
+     *        How long to wait after the last form change before rebuilding
+     * @param {number} [opts.preview.cacheSize=6]
+     *        How many recent PDF docs to keep in the LRU cache
+     * @param {number} [opts.preview.renderScale=1.5]
+     *        Canvas-pixel multiplier (1.5 ≈ retina). Higher = sharper but
+     *        slower / more memory.
+     * @param {string} [opts.preview.pdfJsUrl]
+     *        Override the bundled PDF.js CDN URL (rare — use a mirror)
+     * @param {string} [opts.preview.pdfJsWorkerUrl]
+     *        Override the bundled PDF.js worker URL (must match jsUrl)
      * @returns {Object} control API
      */
     function init(opts) {
         opts = opts || {};
         var storageKey = opts.storageKey || 'se_page_setup_v1';
         var container = opts.container || document.body;
+        var previewOpts = opts.preview || null;
+        var previewEnabled = !!(previewOpts
+            && typeof previewOpts.generatePdf === 'function');
 
         _injectCss();
 
@@ -483,6 +564,38 @@
         overlay.style.display = 'none';
         overlay.innerHTML = HTML_TEMPLATE;
         container.appendChild(overlay);
+
+        // If preview is disabled, collapse the left preview pane so the
+        // form sidebar fills the modal. Without this the user stares at
+        // an empty grey rectangle.
+        if (!previewEnabled) {
+            var prevArea = overlay.querySelector('.psh-preview-area');
+            if (prevArea) prevArea.style.display = 'none';
+            // Topbar page count + canvas no longer meaningful
+            var topCount = _qs(overlay, 'pageCount');
+            if (topCount && topCount.parentNode) topCount.parentNode.style.display = 'none';
+            // Sidebar takes 100% width so form stretches
+            var sidebar = overlay.querySelector('.psh-sidebar');
+            if (sidebar) sidebar.style.flex = '1 1 auto';
+        }
+
+        // Per-instance preview state (only used when enabled)
+        var pv = {
+            cache: new Map(),  // key=JSON.stringify(state) → PDF.js doc
+            cacheSize: previewOpts && previewOpts.cacheSize != null
+                ? previewOpts.cacheSize : 6,
+            renderScale: previewOpts && previewOpts.renderScale != null
+                ? previewOpts.renderScale : 1.5,
+            debounceMs: previewOpts && previewOpts.debounceMs != null
+                ? previewOpts.debounceMs : 400,
+            pdf: null,
+            ps: null,
+            pageNumber: 1,
+            pageCount: 1,
+            buildToken: 0,
+            debounceTimer: null,
+            offCanvas: null,
+        };
 
         // Click overlay (outside the card) to close
         overlay.addEventListener('click', function(e) {
@@ -510,6 +623,7 @@
                 try { opts.onReset(); }
                 catch (err) { console.error('[page-setup] onReset threw:', err); }
             }
+            if (previewEnabled) _schedulePreview();
         });
 
         // Re-show/hide custom sub-forms when their dropdown changes
@@ -530,6 +644,143 @@
             }
         });
 
+        // ===== Preview pipeline (only active when previewEnabled) =====
+
+        function _cachePut(key, pdf) {
+            if (pv.cache.has(key)) pv.cache.delete(key);
+            pv.cache.set(key, pdf);
+            while (pv.cache.size > pv.cacheSize) {
+                var oldestKey = pv.cache.keys().next().value;
+                var oldPdf = pv.cache.get(oldestKey);
+                if (oldPdf && oldPdf !== pv.pdf) {
+                    try { oldPdf.destroy(); } catch (e) {}
+                }
+                pv.cache.delete(oldestKey);
+            }
+        }
+
+        function _updateNav() {
+            var cur = _qs(overlay, 'navCurrent');
+            var tot = _qs(overlay, 'navTotal');
+            var prev = _qs(overlay, 'navPrev');
+            var next = _qs(overlay, 'navNext');
+            var topCount = _qs(overlay, 'pageCount');
+            if (cur) cur.textContent = pv.pageNumber;
+            if (tot) tot.textContent = pv.pageCount;
+            if (topCount) topCount.textContent = pv.pageCount;
+            if (prev) prev.disabled = pv.pageNumber <= 1;
+            if (next) next.disabled = pv.pageNumber >= pv.pageCount;
+        }
+
+        async function _drawCurrentPage() {
+            if (!pv.pdf) return;
+            var canvas = _qs(overlay, 'canvas');
+            var inner = overlay.querySelector('.psh-canvas-inner');
+            var marginOv = overlay.querySelector('.psh-margin-overlay');
+            if (!canvas || !inner) return;
+            var page = await pv.pdf.getPage(pv.pageNumber);
+            var viewport = page.getViewport({ scale: pv.renderScale });
+            var newW = Math.round(viewport.width);
+            var newH = Math.round(viewport.height);
+            // Anti-flicker: render to offscreen first, then transfer in
+            // two synchronous lines so the visible canvas never blanks.
+            var off = pv.offCanvas
+                || (pv.offCanvas = document.createElement('canvas'));
+            off.width = newW; off.height = newH;
+            inner.style.width = ''; inner.style.height = '';
+            await page.render({
+                canvasContext: off.getContext('2d'), viewport,
+            }).promise;
+            if (canvas.width !== newW) canvas.width = newW;
+            if (canvas.height !== newH) canvas.height = newH;
+            canvas.getContext('2d').drawImage(off, 0, 0);
+            // Position margin overlay as % of the canvas inner box.
+            // Robust against device-px vs CSS-px discrepancies.
+            var ps = pv.ps;
+            if (ps && marginOv) {
+                var paper = _paperToOrientedMm(ps.paperSize, ps.orientation);
+                marginOv.style.left   = (ps.marginLeft   / paper.w * 100) + '%';
+                marginOv.style.right  = (ps.marginRight  / paper.w * 100) + '%';
+                marginOv.style.top    = (ps.marginTop    / paper.h * 100) + '%';
+                marginOv.style.bottom = (ps.marginBottom / paper.h * 100) + '%';
+            }
+            _updateNav();
+        }
+
+        async function _rebuildPreview() {
+            var myToken = ++pv.buildToken;
+            var ps = _readForm(overlay);
+            var cacheKey = JSON.stringify(ps);
+            if (pv.cache.has(cacheKey)) {
+                var pdf = pv.cache.get(cacheKey);
+                _cachePut(cacheKey, pdf);  // LRU touch
+                pv.pdf = pdf; pv.ps = ps; pv.pageCount = pdf.numPages;
+                if (pv.pageNumber > pdf.numPages) pv.pageNumber = 1;
+                await _drawCurrentPage();
+                if (myToken !== pv.buildToken) return;
+                return;
+            }
+            var blob;
+            try {
+                blob = await previewOpts.generatePdf(ps);
+            } catch (e) {
+                console.warn('[page-setup] generatePdf threw:', e);
+                return;
+            }
+            if (myToken !== pv.buildToken) return;
+            if (!blob) return;
+            try {
+                await _loadPdfJs(
+                    previewOpts.pdfJsUrl, previewOpts.pdfJsWorkerUrl);
+                if (myToken !== pv.buildToken) return;
+                var buf = await blob.arrayBuffer();
+                if (myToken !== pv.buildToken) return;
+                var pdf2 = await global.pdfjsLib
+                    .getDocument({ data: buf }).promise;
+                if (myToken !== pv.buildToken) {
+                    try { pdf2.destroy(); } catch (e) {}
+                    return;
+                }
+                _cachePut(cacheKey, pdf2);
+                pv.pdf = pdf2; pv.ps = ps; pv.pageCount = pdf2.numPages;
+                if (pv.pageNumber > pdf2.numPages) pv.pageNumber = 1;
+                await _drawCurrentPage();
+            } catch (e) {
+                console.warn('[page-setup] preview render failed:', e);
+            }
+        }
+
+        function _schedulePreview() {
+            if (!previewEnabled) return;
+            clearTimeout(pv.debounceTimer);
+            pv.debounceTimer = setTimeout(_rebuildPreview, pv.debounceMs);
+        }
+
+        function _gotoPage(delta) {
+            if (!pv.pdf) return;
+            var next = Math.max(1, Math.min(pv.pageCount,
+                pv.pageNumber + delta));
+            if (next === pv.pageNumber) return;
+            pv.pageNumber = next;
+            _drawCurrentPage();
+        }
+
+        if (previewEnabled) {
+            // Wire page nav buttons
+            _qs(overlay, 'navPrev').addEventListener('click',
+                function() { _gotoPage(-1); });
+            _qs(overlay, 'navNext').addEventListener('click',
+                function() { _gotoPage(+1); });
+            // Wire form changes — any input/change inside the sidebar
+            // triggers debounced rebuild. Captures select dropdowns,
+            // text inputs, number inputs, checkboxes, radios.
+            var sidebar = overlay.querySelector('.psh-sidebar');
+            if (sidebar) {
+                sidebar.addEventListener('input', _schedulePreview);
+                sidebar.addEventListener('change', _schedulePreview);
+            }
+        }
+
         function open(openOpts) {
             openOpts = openOpts || {};
             var seed = openOpts.state || loadState(storageKey);
@@ -539,10 +790,18 @@
             _qs(overlay, 'psPrintArea').value = '';
             _qs(overlay, 'psPrintScope').value = openOpts.scope || 'current';
             overlay.style.display = 'flex';
+            if (previewEnabled) {
+                pv.pageNumber = 1;
+                _schedulePreview();
+            }
         }
 
         function close() {
             overlay.style.display = 'none';
+            if (previewEnabled) {
+                clearTimeout(pv.debounceTimer);
+                pv.buildToken++;  // invalidate any in-flight build
+            }
             if (typeof opts.onClose === 'function') {
                 try { opts.onClose(); }
                 catch (err) { console.error('[page-setup] onClose threw:', err); }
@@ -555,16 +814,43 @@
             getState: function() { return _readForm(overlay); },
             setState: function(state) {
                 _seedForm(overlay, Object.assign({}, DEFAULTS, state || {}));
+                if (previewEnabled) _schedulePreview();
             },
             loadFromStorage: function() {
                 _seedForm(overlay, loadState(storageKey));
+                if (previewEnabled) _schedulePreview();
             },
             saveToStorage: function() {
                 saveState(_readForm(overlay), storageKey);
             },
+            // NEW v1.1.0 preview API
+            refreshPreview: function() {
+                if (previewEnabled) _rebuildPreview();
+            },
+            invalidatePreviewCache: function() {
+                for (var pdf of pv.cache.values()) {
+                    try { pdf.destroy(); } catch (e) {}
+                }
+                pv.cache.clear();
+            },
+            goToPage: function(n) {
+                if (!previewEnabled || !pv.pdf) return;
+                pv.pageNumber = Math.max(1, Math.min(pv.pageCount, n));
+                _drawCurrentPage();
+            },
+            getCurrentPage: function() { return pv.pageNumber; },
+            getPageCount: function() { return pv.pageCount; },
+            isPreviewEnabled: function() { return previewEnabled; },
             getOverlayEl: function() { return overlay; },
             getCanvasEl: function() { return _qs(overlay, 'canvas'); },
             destroy: function() {
+                if (previewEnabled) {
+                    clearTimeout(pv.debounceTimer);
+                    for (var pdf of pv.cache.values()) {
+                        try { pdf.destroy(); } catch (e) {}
+                    }
+                    pv.cache.clear();
+                }
                 if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
             },
         };
@@ -573,7 +859,7 @@
     // ----- Public API -----
 
     SeShared.print.pageSetup = {
-        version: '1.0.0',
+        version: '1.1.0',
         DEFAULTS: DEFAULTS,
         MARGIN_PRESETS: MARGIN_PRESETS,
         colIdxToLetter: colIdxToLetter,

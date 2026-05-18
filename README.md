@@ -10,7 +10,7 @@ Modules are designed to be **drop-in** via [jsDelivr CDN](https://www.jsdelivr.c
 |---|---|---|
 | [`xlsx/thai-be.js`](xlsx/thai-be.js) | `SeShared.xlsx.thaiBe` | Convert Thai Buddhist Era dates (text + Excel-encoded serials) when importing xlsx into Univer |
 | [`print/preview.js`](print/preview.js) | `SeShared.print.preview` | Print PDF blobs via popup + auto-print, Ctrl+P interceptor for canvas-based UIs |
-| [`print/page-setup.js`](print/page-setup.js) | `SeShared.print.pageSetup` | Drop-in Page Setup modal (Thai UI) — paper/orientation/margins/scaling/print-titles/print-area + localStorage |
+| [`print/page-setup.js`](print/page-setup.js) | `SeShared.print.pageSetup` | Drop-in Page Setup modal (Thai UI) — paper/orientation/margins/scaling/print-titles/print-area + localStorage + **live PDF preview pane (v1.1.0+)** |
 | [`print/pdf-generator.js`](print/pdf-generator.js) | `SeShared.print.pdfGenerator` | jsPDF + autoTable + Sarabun (Thai) font lazy-loader + page-layout math (paper/margin/scale/column-split) |
 | [`file-io/pickers.js`](file-io/pickers.js) | `SeShared.fileIo.pickers` | Cross-browser Save/Open helpers — FSA picker on Chrome/Edge, fallback to `<a download>` / `<input>` on Firefox/Safari/Brave; stale-handle detection |
 
@@ -20,7 +20,7 @@ More modules to be added as common patterns emerge (file I/O, UI components, etc
 
 ```html
 <!-- Load specific module(s) you need -->
-<script src="https://cdn.jsdelivr.net/gh/sesurvey-ai/se-univer-shared@v1.4.0/xlsx/thai-be.js"></script>
+<script src="https://cdn.jsdelivr.net/gh/sesurvey-ai/se-univer-shared@v1.5.0/xlsx/thai-be.js"></script>
 
 <script>
     // Each module attaches to window.SeShared.<category>.<name>
@@ -31,7 +31,7 @@ More modules to be added as common patterns emerge (file I/O, UI components, etc
 ## Versioning
 
 - **Pin to a specific tag** for production stability:
-  `cdn.jsdelivr.net/gh/sesurvey-ai/se-univer-shared@v1.4.0/...`
+  `cdn.jsdelivr.net/gh/sesurvey-ai/se-univer-shared@v1.5.0/...`
 - **Pin to a branch** for auto-updates (jsDelivr caches ~24h):
   `cdn.jsdelivr.net/gh/sesurvey-ai/se-univer-shared@main/...`
 

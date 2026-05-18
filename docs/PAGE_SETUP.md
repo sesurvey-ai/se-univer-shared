@@ -16,15 +16,17 @@ Module นี้:
 - ✅ Margin/scaling presets เหมือน Excel
 - ✅ Print Titles (rows/cols ซ้ำ) + Print Area
 - ✅ Responsive (มือถือ stack แนวตั้ง)
-- ❌ **ไม่มี** PDF preview rendering (consumer ใส่ผ่าน callback)
+- ✅ **Live PDF preview pane** (v1.1.0+) — PDF.js renderer, LRU cache,
+  debounced rebuild, page navigation, margin overlay
 - ❌ **ไม่มี** actual print execution (consumer ใส่ผ่าน callback)
+- ❌ **ไม่มี** PDF generation logic (consumer provides via `opts.preview.generatePdf`)
 
 แยก scope ทำให้ใช้ได้กับ project ที่ใช้ jsPDF, pdfmake, html2canvas, หรืออะไรก็ตาม
 
 ## Quick Start
 
 ```html
-<script src="https://cdn.jsdelivr.net/gh/sesurvey-ai/se-univer-shared@v1.2.0/print/page-setup.js"></script>
+<script src="https://cdn.jsdelivr.net/gh/sesurvey-ai/se-univer-shared@v1.5.0/print/page-setup.js"></script>
 
 <script>
 const ps = SeShared.print.pageSetup.init({
@@ -36,12 +38,25 @@ const ps = SeShared.print.pageSetup.init({
         // hand off to print/preview module (or your own):
         SeShared.print.preview.printPdfBlob(pdfBlob);
     },
+    // OPTIONAL: enable the live preview pane (v1.1.0+)
+    preview: {
+        generatePdf: async (state) => {
+            // Return a PDF Blob for the given state. Module caches by
+            // JSON.stringify(state) and lazy-loads PDF.js for rendering.
+            return await myPdfGenerator(state);
+        },
+        // debounceMs: 400,      // default
+        // cacheSize: 6,         // default LRU size
+        // renderScale: 1.5,     // canvas pixel multiplier (retina)
+    },
 });
 
 // Open modal from a button click / Ctrl+P intercept:
 document.getElementById('myPrintBtn').addEventListener('click', () => ps.open());
 </script>
 ```
+
+**Without preview** (omit `opts.preview`): the modal hides the left-side preview area entirely and the form sidebar takes the full width — useful for projects that don't have a PDF generator yet, or run headless.
 
 ## State Schema
 
@@ -122,6 +137,19 @@ Direct access to the preview canvas. Module doesn't render anything into it — 
 ### `control.destroy()`
 
 Remove the modal from the DOM. Safe to call once when you're done with it (single-page-app teardown).
+
+### Preview API (v1.1.0+)
+
+Only meaningful when `opts.preview` was set on init.
+
+| Method | Returns | Description |
+|---|---|---|
+| `control.refreshPreview()` | — | Force-rebuild the preview immediately (skip debounce) |
+| `control.invalidatePreviewCache()` | — | Destroy all cached PDF docs (call when underlying data changes) |
+| `control.goToPage(n)` | — | Jump to specific page (1-based, clamped to valid range) |
+| `control.getCurrentPage()` | `number` | Current page being shown (1-based) |
+| `control.getPageCount()` | `number` | Total pages in the current preview PDF |
+| `control.isPreviewEnabled()` | `boolean` | Whether `opts.preview` was supplied |
 
 ## Standalone Utilities
 
