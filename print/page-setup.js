@@ -201,7 +201,20 @@
         '.psh-canvas-inner{position:relative;display:inline-block;background:var(--paper);' +
         'border-radius:2px;box-shadow:0 1px 1px rgba(0,0,0,.04),0 4px 16px rgba(0,0,0,.06),' +
         '0 24px 60px -16px rgba(0,0,0,.18);}' +
-        '.psh-canvas-inner canvas{display:block;max-width:100%;height:auto;border-radius:2px;}' +
+        '.psh-canvas-inner canvas{display:block;width:100%;height:auto;border-radius:2px;}' +
+        '.psh-zoom{display:inline-flex;align-items:center;gap:2px;background:#fff;' +
+        'border:1px solid var(--ink-12);border-radius:100px;padding:3px;margin-right:4px;}' +
+        '.psh-zoom-btn{background:transparent;border:0;color:var(--ink-72);' +
+        'width:24px;height:24px;display:inline-flex;align-items:center;justify-content:center;' +
+        'border-radius:100px;cursor:pointer;font-size:14px;font-family:inherit;line-height:1;' +
+        'font-weight:600;transition:background .15s,color .15s;}' +
+        '.psh-zoom-btn:hover{background:var(--ink-12);color:var(--ink);}' +
+        '.psh-zoom-btn:disabled{opacity:.35;cursor:not-allowed;}' +
+        '.psh-zoom-label{font-family:"IBM Plex Mono",ui-monospace,monospace;' +
+        'font-size:11px;color:var(--ink-72);padding:0 8px;min-width:44px;' +
+        'text-align:center;cursor:pointer;font-variant-numeric:tabular-nums;' +
+        'transition:color .15s;}' +
+        '.psh-zoom-label:hover{color:var(--ink);}' +
         '.psh-margin-overlay{position:absolute;inset:0;pointer-events:none;}' +
         '.psh-margin-line{position:absolute;border-color:var(--ink-18);' +
         'border-style:dashed;border-width:0;}' +
@@ -291,6 +304,11 @@
             '<span class="psh-title">การตั้งค่าการพิมพ์</span>' +
             '<span class="psh-count">ทั้งหมด: <span data-psh="pageCount">—</span> หน้า</span>' +
             '<span class="psh-spacer"></span>' +
+            '<div class="psh-zoom">' +
+              '<button type="button" class="psh-zoom-btn" data-psh="zoomOut" title="ย่อ">&minus;</button>' +
+              '<span class="psh-zoom-label" data-psh="zoomLabel" title="คลิกเพื่อพอดีกับหน้า">100%</span>' +
+              '<button type="button" class="psh-zoom-btn" data-psh="zoomIn" title="ขยาย">+</button>' +
+            '</div>' +
             '<button type="button" class="psh-btn secondary" data-psh="cancel">ยกเลิก</button>' +
             '<button type="button" class="psh-btn primary" data-psh="next">ถัดไป</button>' +
           '</div>' +
@@ -595,6 +613,11 @@
             buildToken: 0,
             debounceTimer: null,
             offCanvas: null,
+            // Display zoom (CSS scale applied on top of PDF.js render).
+            // 1.0 = fit-to-pane (whole page visible without scrolling).
+            // Clamped to [0.25, 4.0] in _zoomBy. PDF.js renderScale stays
+            // fixed for crisp text — we only resize the canvas DOM box.
+            zoom: 1.0,
         };
 
         // Click overlay (outside the card) to close
@@ -694,6 +717,10 @@
             if (canvas.width !== newW) canvas.width = newW;
             if (canvas.height !== newH) canvas.height = newH;
             canvas.getContext('2d').drawImage(off, 0, 0);
+            // Size the inner box to the zoom-adjusted display
+            // dimensions. Canvas CSS is width:100%/height:auto so it
+            // follows inner — setting inner alone keeps aspect ratio.
+            _applyZoom();
             // Position margin overlay as % of the canvas inner box.
             // Robust against device-px vs CSS-px discrepancies.
             var ps = pv.ps;
@@ -705,6 +732,54 @@
                 marginOv.style.bottom = (ps.marginBottom / paper.h * 100) + '%';
             }
             _updateNav();
+        }
+
+        // Resize the inner box (and therefore the canvas inside it,
+        // which is width:100%/height:auto) so it fits the preview pane
+        // at zoom = 1.0 and scales linearly from there. Called after
+        // each render + from the zoom button handlers. PDF.js rendered
+        // pixels stay at pv.renderScale (1.5) — we only scale the DOM
+        // box, so text remains crisp until the user zooms past 100%.
+        function _applyZoom() {
+            var inner = overlay.querySelector('.psh-canvas-inner');
+            var wrap = overlay.querySelector('.psh-canvas-wrap');
+            var canvas = _qs(overlay, 'canvas');
+            if (!inner || !wrap || !canvas || !canvas.width) return;
+            var paneW = wrap.clientWidth;
+            var paneH = wrap.clientHeight;
+            if (paneW < 50 || paneH < 50) return;  // not laid out yet
+            var aspect = canvas.width / canvas.height;
+            var fitW, fitH;
+            if (aspect > paneW / paneH) {
+                fitW = paneW;
+                fitH = fitW / aspect;
+            } else {
+                fitH = paneH;
+                fitW = fitH * aspect;
+            }
+            inner.style.width = (fitW * pv.zoom) + 'px';
+            inner.style.height = '';  // canvas height:auto takes over
+            _updateZoomLabel();
+        }
+
+        function _updateZoomLabel() {
+            var lbl = _qs(overlay, 'zoomLabel');
+            if (lbl) lbl.textContent = Math.round(pv.zoom * 100) + '%';
+            var zin = _qs(overlay, 'zoomIn');
+            var zout = _qs(overlay, 'zoomOut');
+            if (zin) zin.disabled = pv.zoom >= 4.0;
+            if (zout) zout.disabled = pv.zoom <= 0.25;
+        }
+
+        function _zoomBy(delta) {
+            pv.zoom = Math.max(0.25, Math.min(4.0,
+                Math.round((pv.zoom + delta) * 100) / 100));
+            _applyZoom();
+        }
+
+        function _zoomReset() {
+            pv.zoom = 1.0;
+            _applyZoom();
         }
 
         async function _rebuildPreview() {
@@ -771,6 +846,24 @@
                 function() { _gotoPage(-1); });
             _qs(overlay, 'navNext').addEventListener('click',
                 function() { _gotoPage(+1); });
+            // Zoom buttons — adjust pv.zoom + reapply CSS sizing on
+            // the canvas inner box. Clicking the label resets to 100%
+            // (fit-to-pane). PDF.js render is not re-run; we only
+            // scale the DOM. Buttons get disabled at the clamp ends.
+            _qs(overlay, 'zoomIn').addEventListener('click',
+                function() { _zoomBy(0.1); });
+            _qs(overlay, 'zoomOut').addEventListener('click',
+                function() { _zoomBy(-0.1); });
+            _qs(overlay, 'zoomLabel').addEventListener('click',
+                function() { _zoomReset(); });
+            // Re-fit on viewport resize so 100% always matches the
+            // current pane size. Debounced inline to avoid thrashing
+            // during a drag-resize.
+            var resizeTimer = null;
+            window.addEventListener('resize', function() {
+                clearTimeout(resizeTimer);
+                resizeTimer = setTimeout(_applyZoom, 120);
+            });
             // Wire form changes — any input/change inside the sidebar
             // triggers debounced rebuild. Captures select dropdowns,
             // text inputs, number inputs, checkboxes, radios.
