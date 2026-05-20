@@ -234,16 +234,24 @@
         '.psh-nav-label{font-family:"IBM Plex Mono",ui-monospace,monospace;' +
         'font-size:11px;color:var(--ink-72);padding:0 6px;font-variant-numeric:tabular-nums;' +
         'letter-spacing:.02em;display:inline-flex;align-items:center;gap:4px;}' +
-        '.psh-nav-input{font-family:"IBM Plex Mono",ui-monospace,monospace;' +
+        // Higher specificity (input[type=number].psh-nav-input) needed
+        // to win against the generic ".psh-card input[type=number]"
+        // sidebar rule below which sets width:64px + padding:8px 10px
+        // for form fields. Page-nav input must stay compact for the
+        // bottom-center pill.
+        '.psh-card input[type=number].psh-nav-input{' +
+        'font-family:"IBM Plex Mono",ui-monospace,monospace;' +
         'font-size:11px;color:var(--ink);background:transparent;border:1px solid transparent;' +
-        'border-radius:4px;padding:2px 4px;width:34px;text-align:center;' +
+        'border-radius:4px;padding:1px 2px;width:24px;text-align:center;' +
         'font-variant-numeric:tabular-nums;-moz-appearance:textfield;' +
         'transition:border-color .15s,background .15s;}' +
-        '.psh-nav-input::-webkit-outer-spin-button,.psh-nav-input::-webkit-inner-spin-button' +
+        '.psh-card input[type=number].psh-nav-input::-webkit-outer-spin-button,' +
+        '.psh-card input[type=number].psh-nav-input::-webkit-inner-spin-button' +
         '{-webkit-appearance:none;margin:0;}' +
-        '.psh-nav-input:hover{border-color:var(--ink-12);}' +
-        '.psh-nav-input:focus{outline:none;border-color:var(--accent);' +
-        'background:#fff;box-shadow:0 0 0 2px rgba(196,74,44,.15);}' +
+        '.psh-card input[type=number].psh-nav-input:hover{border-color:var(--ink-12);}' +
+        '.psh-card input[type=number].psh-nav-input:focus{outline:none;' +
+        'border-color:var(--accent);background:#fff;' +
+        'box-shadow:0 0 0 2px rgba(196,74,44,.15);}' +
         '.psh-sidebar{flex:0 0 380px;border-left:1px solid var(--ink-12);overflow:auto;' +
         'background:var(--surface);display:flex;flex-direction:column;}' +
         '.psh-sidebar .psh-form{padding:22px 24px 18px;}' +
