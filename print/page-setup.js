@@ -232,8 +232,18 @@
         '.psh-nav-btn:hover{background:var(--ink-12);color:var(--ink);}' +
         '.psh-nav-btn:disabled{opacity:.35;cursor:not-allowed;}' +
         '.psh-nav-label{font-family:"IBM Plex Mono",ui-monospace,monospace;' +
-        'font-size:11px;color:var(--ink-72);padding:0 8px;font-variant-numeric:tabular-nums;' +
-        'letter-spacing:.02em;min-width:40px;text-align:center;}' +
+        'font-size:11px;color:var(--ink-72);padding:0 6px;font-variant-numeric:tabular-nums;' +
+        'letter-spacing:.02em;display:inline-flex;align-items:center;gap:4px;}' +
+        '.psh-nav-input{font-family:"IBM Plex Mono",ui-monospace,monospace;' +
+        'font-size:11px;color:var(--ink);background:transparent;border:1px solid transparent;' +
+        'border-radius:4px;padding:2px 4px;width:34px;text-align:center;' +
+        'font-variant-numeric:tabular-nums;-moz-appearance:textfield;' +
+        'transition:border-color .15s,background .15s;}' +
+        '.psh-nav-input::-webkit-outer-spin-button,.psh-nav-input::-webkit-inner-spin-button' +
+        '{-webkit-appearance:none;margin:0;}' +
+        '.psh-nav-input:hover{border-color:var(--ink-12);}' +
+        '.psh-nav-input:focus{outline:none;border-color:var(--accent);' +
+        'background:#fff;box-shadow:0 0 0 2px rgba(196,74,44,.15);}' +
         '.psh-sidebar{flex:0 0 380px;border-left:1px solid var(--ink-12);overflow:auto;' +
         'background:var(--surface);display:flex;flex-direction:column;}' +
         '.psh-sidebar .psh-form{padding:22px 24px 18px;}' +
@@ -327,7 +337,11 @@
               '</div>' +
               '<div class="psh-page-nav">' +
                 '<button type="button" class="psh-nav-btn" data-psh="navPrev" title="ก่อนหน้า">&#9664;</button>' +
-                '<span class="psh-nav-label"><span data-psh="navCurrent">1</span> / <span data-psh="navTotal">1</span></span>' +
+                '<span class="psh-nav-label">' +
+                  '<input type="number" class="psh-nav-input" data-psh="navCurrent" ' +
+                    'min="1" step="1" value="1" title="กรอกหน้าที่จะไป (Enter)">' +
+                  '/ <span data-psh="navTotal">1</span>' +
+                '</span>' +
                 '<button type="button" class="psh-nav-btn" data-psh="navNext" title="ถัดไป">&#9654;</button>' +
               '</div>' +
             '</div>' +
@@ -688,11 +702,32 @@
             var prev = _qs(overlay, 'navPrev');
             var next = _qs(overlay, 'navNext');
             var topCount = _qs(overlay, 'pageCount');
-            if (cur) cur.textContent = pv.pageNumber;
+            // navCurrent is now an <input type="number"> — use .value.
+            // Skip while user is editing so a programmatic update doesn't
+            // yank the partially-typed value mid-keystroke.
+            if (cur && document.activeElement !== cur) {
+                cur.value = pv.pageNumber;
+            }
+            if (cur) cur.max = pv.pageCount;
             if (tot) tot.textContent = pv.pageCount;
             if (topCount) topCount.textContent = pv.pageCount;
             if (prev) prev.disabled = pv.pageNumber <= 1;
             if (next) next.disabled = pv.pageNumber >= pv.pageCount;
+        }
+
+        // Jump to the page typed in the navCurrent input. Clamped to
+        // [1, pageCount]; out-of-range values snap to the nearest end
+        // rather than rejecting silently. Used by Enter/blur handlers.
+        function _jumpToTyped() {
+            var cur = _qs(overlay, 'navCurrent');
+            if (!cur || !pv.pdf) return;
+            var n = parseInt(cur.value, 10);
+            if (!Number.isFinite(n)) n = pv.pageNumber;
+            n = Math.max(1, Math.min(pv.pageCount, n));
+            cur.value = n;
+            if (n === pv.pageNumber) return;
+            pv.pageNumber = n;
+            _drawCurrentPage();
         }
 
         async function _drawCurrentPage() {
@@ -856,6 +891,33 @@
                 function() { _zoomBy(-0.1); });
             _qs(overlay, 'zoomLabel').addEventListener('click',
                 function() { _zoomReset(); });
+            // Jump-to-page input — Enter commits, Escape reverts to the
+            // current page, blur commits too (covers click-outside).
+            // Number-spin keys (ArrowUp/Down) are handled natively by
+            // the input but don't fire 'change' until blur, so we also
+            // listen for 'input' with debounce in case the user spams
+            // arrows; debounced via setTimeout(0)+token to coalesce.
+            var navIn = _qs(overlay, 'navCurrent');
+            if (navIn) {
+                navIn.addEventListener('keydown', function(e) {
+                    if (e.key === 'Enter') {
+                        e.preventDefault();
+                        _jumpToTyped();
+                        navIn.blur();
+                    } else if (e.key === 'Escape') {
+                        e.preventDefault();
+                        navIn.value = pv.pageNumber;
+                        navIn.blur();
+                    }
+                });
+                navIn.addEventListener('blur', _jumpToTyped);
+                // Select-all on focus so typing replaces the current
+                // number — same affordance as Chrome's PDF viewer
+                // page input.
+                navIn.addEventListener('focus', function() {
+                    setTimeout(function() { navIn.select(); }, 0);
+                });
+            }
             // Re-fit on viewport resize so 100% always matches the
             // current pane size. Debounced inline to avoid thrashing
             // during a drag-resize.
