@@ -241,14 +241,15 @@
         // bottom-center pill.
         '.psh-card input[type=number].psh-nav-input{' +
         'font-family:"IBM Plex Mono",ui-monospace,monospace;' +
-        'font-size:11px;color:var(--ink);background:transparent;border:1px solid transparent;' +
+        'font-size:11px;color:var(--ink);background:transparent;' +
+        'border:1px solid var(--ink-18);' +
         'border-radius:4px;padding:1px 2px;width:24px;text-align:center;' +
         'font-variant-numeric:tabular-nums;-moz-appearance:textfield;' +
         'transition:border-color .15s,background .15s;}' +
         '.psh-card input[type=number].psh-nav-input::-webkit-outer-spin-button,' +
         '.psh-card input[type=number].psh-nav-input::-webkit-inner-spin-button' +
         '{-webkit-appearance:none;margin:0;}' +
-        '.psh-card input[type=number].psh-nav-input:hover{border-color:var(--ink-12);}' +
+        '.psh-card input[type=number].psh-nav-input:hover{border-color:var(--ink-32);}' +
         '.psh-card input[type=number].psh-nav-input:focus{outline:none;' +
         'border-color:var(--accent);background:#fff;' +
         'box-shadow:0 0 0 2px rgba(196,74,44,.15);}' +
